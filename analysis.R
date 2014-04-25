@@ -6,6 +6,12 @@ sexclass <- glm(Survived~Sex*as.factor(Pclass), data=training, family=binomial)
 sexclass.sim <- glm(Survived~Sex+as.factor(Pclass), data=training, family=binomial)
 
 
+fitted(sexclass) ### fitted value from the logistic regression (probability)
+
+fitted(sexclass) > 0.5 ### predicted labels
+
+training$Survived==1 ### actual labels
+
 sum((fitted(sexclass) > 0.5) ==  (training$Survived==1)) / nrow(training) ### training set accuracy
 
 ### what actually matter is test set accuracy
