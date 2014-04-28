@@ -1,28 +1,49 @@
-training <- read.csv("train.csv", stringsAsFactors = FALSE)
-require(MASS)
+raw <- read.csv("train.csv", stringsAsFactors = FALSE)
 
-### Very simple model
-sexclass <- glm(Survived~Sex*as.factor(Pclass), data=training, family=binomial)
-sexclass.sim <- glm(Survived~Sex+as.factor(Pclass), data=training, family=binomial)
+### preprocess
+
+require(stringr)
+extractTitle <- function(x) {
+    res <- strsplit(x, ",")
+    res2 <- strsplit(res[[1]][2], "\\.")
+    return(str_trim(tolower(res2[[1]][1])))
+}
+
+preprocess <- function(x, test = FALSE) {
+    if (!test) {
+    x$die <- factor(x$Survived)
+}
+    x$classF <- factor(x$Pclass)
+    x$gender <- factor(x$Sex)
+    x$Age[is.na(x$Age)] <- mean(x$Age, na.rm = TRUE)
+    x$single <- factor(x$SibSp == 0 & x$Parch == 0)
+    x$EmC <- factor(x$Embarked == "C")
+    x$title <- sapply(x$Name, extractTitle)
+    x$mrs <- factor(x$title == "mrs")
+    x$miss <- factor(x$title == "miss")
+    x$master <- factor(x$title == "master")
+    return(x)
+}
 
 
-fitted(sexclass) ### fitted value from the logistic regression (probability)
+train <- preprocess(raw)
+require(randomForest)
+rf.fit <- randomForest(die~gender+classF+Age+Fare, data=train, ntree=10000, importance = TRUE)
+rf.fit2 <- randomForest(die~gender+classF+Age+Fare+mrs+miss+master, data=train, ntree=10000, importance = TRUE)
 
-fitted(sexclass) > 0.5 ### predicted labels
+varImpPlot(rf.fit)
+sum(predict(rf.fit) == train$die) / nrow(train)
+varImpPlot(rf.fit2)
+sum(predict(rf.fit2) == train$die) / nrow(train)
 
-training$Survived==1 ### actual labels
-
-sum((fitted(sexclass) > 0.5) ==  (training$Survived==1)) / nrow(training) ### training set accuracy
+table(sapply(train$Name, extractTitle), train$die)
 
 ### what actually matter is test set accuracy
 
-testset <- read.csv("test.csv", stringsAsFactors = FALSE)
+testraw <- read.csv("test.csv", stringsAsFactors = FALSE)
+testset <- preprocess(testraw, test = TRUE)
 
-testPredicted <- predict(sexclass, testset, "response")
+testsetSur <- as.numeric(predict(rf.fit, testset)) - 1
+testsetSur[is.na(testsetSur)] <- 0
 
-
-submission <- data.frame(PassengerId = testset$PassengerId, Survived = as.numeric((testPredicted > 0.5)))
-
-write.csv(submission, file="submission.csv", row.names = FALSE)
-
-### submit that csv file to kaggle
+write.csv(data.frame(PassengerId = testset$PassengerId, Survived = testsetSur), file = "submission2.csv", row.names = FALSE)
